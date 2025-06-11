@@ -22,7 +22,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-#RUN huggingface-cli login --token ${HF_TOKEN}  
+RUN huggingface-cli login --token ${HF_TOKEN}  
 
 
 # Copy the rest of the application
