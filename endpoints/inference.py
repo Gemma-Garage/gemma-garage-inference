@@ -78,7 +78,7 @@ def predict(request: PromptRequest):
     try:
         # Load the tokenizer that was saved with the adapter
         tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-
+        print("Tokenizer loaded successfully.")
         # Load the base model
         # Using bfloat16 for Gemma models is common for performance and memory
         base_model_instance = AutoModelForCausalLM.from_pretrained(
@@ -86,15 +86,15 @@ def predict(request: PromptRequest):
             torch_dtype=torch.bfloat16,  # Or torch.float16 if bfloat16 is not supported
             device_map="auto"  # Automatically distribute model across available devices
         )
-
+        print("Base model loaded successfully.")
         # Apply PEFT adapter to the base model
         # MODEL_DIR now contains the adapter files (adapter_config.json, adapter_model.bin)
         model = PeftModel.from_pretrained(base_model_instance, MODEL_DIR)
-
+        print("Adapter model loaded successfully.")
         # Merge the adapter layers into the base model.
         # This makes inference faster after the one-time cost of merging.
         model = model.merge_and_unload()
-
+        print("Adapter model merged successfully.")
         # Ensure the final model is on the correct device, though device_map="auto" should handle it.
         # Explicitly moving can be a safeguard.
         device = "cuda" if torch.cuda.is_available() else "cpu"
