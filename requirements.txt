@@ -31,7 +31,7 @@ multiprocess==0.70.16
 numpy==2.2.3
 packaging==24.2
 pandas==2.2.3
-#peft==0.14.0
+peft==0.14.0
 propcache==0.3.0
 #protobuf==6.30.0
 psutil==7.0.0
