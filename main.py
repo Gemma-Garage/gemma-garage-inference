@@ -16,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#inference endpoint
 app.include_router(inference.router, prefix="/inference", tags=["Inference"])
 
 
