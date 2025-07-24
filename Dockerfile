@@ -16,6 +16,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Install supervisor for multi-process management
+RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
+
+# Create supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
 WORKDIR /app
 
 # Copy requirements first for better caching
@@ -28,7 +34,7 @@ RUN huggingface-cli login --token ${HF_TOKEN}
 # Copy the rest of the application
 COPY . .
 
-# Expose the port the app runs on
+# Expose only the FastAPI port
 EXPOSE 8080
 
 # Command to run the application
