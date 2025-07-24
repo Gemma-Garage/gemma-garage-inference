@@ -5,6 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from google.cloud import storage
 from peft import PeftModel
+from fastapi import Request
 
 router = APIRouter()
 
@@ -73,3 +74,23 @@ def predict(request: PromptRequest):
     outputs = model.generate(**inputs, max_new_tokens=100)
     response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return {"response": response_text}
+
+@router.post("/inference")
+async def hf_inference(request: Request):
+    body = await request.json()
+    model_name = body.get("model_name")
+    prompt = body.get("prompt")
+    max_new_tokens = body.get("max_new_tokens", 100)
+    if not model_name or not prompt:
+        return {"error": "model_name and prompt are required"}
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = model.to(device)
+        inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return {"response": response_text}
+    except Exception as e:
+        return {"error": str(e)}
