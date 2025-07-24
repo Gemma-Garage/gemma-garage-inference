@@ -16,12 +16,7 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install supervisor for multi-process management
-RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
-
-# Create supervisor config
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
+    
 WORKDIR /app
 
 # Copy requirements first for better caching
