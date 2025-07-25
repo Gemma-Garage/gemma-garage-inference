@@ -88,3 +88,4 @@ grpc-google-iam-v1==0.14.2
 transformers
 # PDF Processing
 PyMuPDF==1.25.4
+bitsandbytes
