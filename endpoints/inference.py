@@ -85,9 +85,20 @@ async def hf_inference(request: Request):
         return {"error": "model_name and prompt are required"}
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32)
+        
+        # Load model with explicit quantization settings to avoid bitsandbytes issues
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, 
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            load_in_8bit=False,  # Explicitly disable 8-bit quantization
+            load_in_4bit=False,  # Explicitly disable 4-bit quantization
+            device_map="auto" if torch.cuda.is_available() else None
+        )
+        
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = model.to(device)
+        if not torch.cuda.is_available():
+            model = model.to(device)
+        
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
         outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
         response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
