@@ -116,6 +116,19 @@ async def hf_inference(request: Request):
                 print(f"🔍 [Inference Debug] Final MODEL_DIR contents:")
                 for item in os.listdir(MODEL_DIR):
                     print(f"🔍 [Inference Debug]   {item}")
+                
+                # Create missing optional files if they don't exist
+                optional_files = {
+                    'added_tokens.json': '{}',
+                    'special_tokens_map.json': '{"bos_token": null, "eos_token": null, "unk_token": null, "pad_token": null}'
+                }
+                
+                for filename, default_content in optional_files.items():
+                    file_path = os.path.join(MODEL_DIR, filename)
+                    if not os.path.exists(file_path):
+                        print(f"🔍 [Inference Debug] Creating missing optional file: {filename}")
+                        with open(file_path, 'w') as f:
+                            f.write(default_content)
                     
         except FileNotFoundError as e:
             print(f"🔍 [Inference Debug] FileNotFoundError: {e}")
@@ -126,7 +139,21 @@ async def hf_inference(request: Request):
         
         # Load base model and apply LoRA adapters
         try:
-            tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+            # Check what files are actually available
+            print(f"🔍 [Inference Debug] Available files in {MODEL_DIR}:")
+            if os.path.exists(MODEL_DIR):
+                for item in os.listdir(MODEL_DIR):
+                    print(f"🔍 [Inference Debug]   {item}")
+            else:
+                print(f"🔍 [Inference Debug] MODEL_DIR {MODEL_DIR} does not exist!")
+            
+            # Load tokenizer - handle missing optional files gracefully
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+            except Exception as tokenizer_error:
+                print(f"🔍 [Inference Debug] Tokenizer loading error: {tokenizer_error}")
+                # Try loading without optional files
+                tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True, local_files_only=True)
             
             # Load base model with the same quantization settings as training
             # This matches the LOAD_IN_4BIT = True setting from finetuning
