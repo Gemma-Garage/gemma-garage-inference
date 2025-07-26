@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter
 from pydantic import BaseModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import torch
 from google.cloud import storage
 from peft import PeftModel
@@ -86,14 +86,38 @@ async def hf_inference(request: Request):
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # Load model with explicit quantization settings to avoid bitsandbytes issues
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, 
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            load_in_8bit=False,  # Explicitly disable 8-bit quantization
-            load_in_4bit=False,  # Explicitly disable 4-bit quantization
-            device_map="auto" if torch.cuda.is_available() else None
-        )
+        # Load model with the same quantization settings used in training
+        # This matches the LOAD_IN_4BIT = True setting from finetuning
+        try:
+            # First attempt: Load with 4-bit quantization (matching training)
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=False,
+            )
+            
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            )
+            print(f"Successfully loaded model {model_name} with 4-bit quantization")
+            
+        except Exception as quant_error:
+            print(f"4-bit quantized loading failed for {model_name}: {quant_error}")
+            print("Falling back to non-quantized loading...")
+            
+            # Second attempt: Load without quantization
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name, 
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                load_in_8bit=False,
+                load_in_4bit=False,
+                device_map="auto" if torch.cuda.is_available() else None
+            )
+            print(f"Successfully loaded model {model_name} without quantization")
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if not torch.cuda.is_available():
