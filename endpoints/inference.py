@@ -89,12 +89,12 @@ async def hf_inference(request: Request):
         # Load model with the same quantization settings used in training
         # This matches the LOAD_IN_4BIT = True setting from finetuning
         try:
-            # First attempt: Load with 4-bit quantization (matching training)
+            # First attempt: Load with 4-bit quantization (matching Unsloth training exactly)
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=False,
+                bnb_4bit_use_double_quant=True,  # Unsloth uses True, not False
             )
             
             model = AutoModelForCausalLM.from_pretrained(
