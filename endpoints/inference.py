@@ -1,22 +1,16 @@
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from google.cloud import storage
 from peft import PeftModel
-from fastapi import Request
 
 router = APIRouter()
 
 MODEL_DIR = "/app/model"
 GCS_BUCKET = "llm-garage-models"
 GCS_PREFIX = "gemma-peft-vertex-output/model"
-
-class PromptRequest(BaseModel):
-    prompt: str
-    request_id: str
-    base_model: str
 
 def download_model_from_gcs(bucket_name, gcs_prefix_for_model, local_dir):
     client = storage.Client()
@@ -45,51 +39,58 @@ def download_model_from_gcs(bucket_name, gcs_prefix_for_model, local_dir):
         blob.download_to_filename(file_path)
     print(f"Downloaded model files from gs://{bucket_name}/{gcs_prefix_for_model} to {local_dir}")
 
-@router.post("/predict")
-def predict(request: PromptRequest):
-    request_id = request.request_id
-    base_model = request.base_model
-    adapter_gcs_path = f"{GCS_PREFIX}/{request_id}/final_model/"
-    try:
-        download_model_from_gcs(GCS_BUCKET, adapter_gcs_path, MODEL_DIR)
-    except FileNotFoundError as e:
-        return {"error": f"Could not load model for request_id {request_id}: {str(e)}"}
-    except Exception as e:
-        return {"error": f"An unexpected error occurred during model download for {request_id}: {str(e)}"}
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-        base_model_instance = AutoModelForCausalLM.from_pretrained(
-            base_model,
-            torch_dtype=torch.bfloat16,
-            device_map="auto"
-        )
-        model = PeftModel.from_pretrained(base_model_instance, MODEL_DIR)
-        model = model.merge_and_unload()
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model.to(device)
-    except Exception as e:
-        print(f"Error loading model/tokenizer for request_id {request_id}: {str(e)}")
-        return {"error": f"Error loading model or tokenizer: {str(e)}"}
-    inputs = tokenizer(request.prompt, return_tensors="pt").to(model.device)
-    outputs = model.generate(**inputs, max_new_tokens=100)
-    response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return {"response": response_text}
-
 @router.post("/inference")
 async def hf_inference(request: Request):
     body = await request.json()
-    model_name = body.get("model_name")
+    request_id = body.get("request_id")  # Get request_id instead of model_name
     prompt = body.get("prompt")
     max_new_tokens = body.get("max_new_tokens", 100)
-    if not model_name or not prompt:
-        return {"error": "model_name and prompt are required"}
+    base_model = body.get("base_model", "google/gemma-3-1b-pt")  # Default base model
+    
+    if not request_id or not prompt:
+        return {"error": "request_id and prompt are required"}
+    
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # Download LoRA adapters from GCS
+        adapter_gcs_path = f"{GCS_PREFIX}/{request_id}/final_model/"
+        try:
+            download_model_from_gcs(GCS_BUCKET, adapter_gcs_path, MODEL_DIR)
+        except FileNotFoundError as e:
+            return {"error": f"Could not load model for request_id {request_id}: {str(e)}"}
+        except Exception as e:
+            return {"error": f"An unexpected error occurred during model download for {request_id}: {str(e)}"}
         
-        # Simple loading - just like you said
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        print(f"Successfully loaded model {model_name}")
+        # Load base model and apply LoRA adapters
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+            
+            # Load base model with the same quantization settings as training
+            # This matches the LOAD_IN_4BIT = True setting from finetuning
+            from transformers import BitsAndBytesConfig
+            
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            
+            base_model_instance = AutoModelForCausalLM.from_pretrained(
+                base_model,
+                quantization_config=bnb_config,
+                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            )
+            
+            # Apply LoRA adapters
+            model = PeftModel.from_pretrained(base_model_instance, MODEL_DIR)
+            print(f"Successfully loaded LoRA adapters for request_id {request_id}")
+            
+        except Exception as e:
+            print(f"Error loading model/tokenizer for request_id {request_id}: {str(e)}")
+            return {"error": f"Error loading model or tokenizer: {str(e)}"}
         
+        # Generate response
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if not torch.cuda.is_available():
             model = model.to(device)
@@ -98,5 +99,6 @@ async def hf_inference(request: Request):
         outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
         response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return {"response": response_text}
+        
     except Exception as e:
         return {"error": str(e)}
