@@ -86,38 +86,9 @@ async def hf_inference(request: Request):
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # Try loading with quantization first, then fallback to non-quantized
-        # This handles both cases: models saved with or without quantization metadata
-        try:
-            # First attempt: Load with quantization (in case quantization config wasn't cleared)
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-            )
-            
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                quantization_config=bnb_config,
-                device_map="auto" if torch.cuda.is_available() else None,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            )
-            print(f"Successfully loaded model {model_name} with quantization")
-            
-        except Exception as quant_error:
-            print(f"Quantized loading failed for {model_name}: {quant_error}")
-            print("Falling back to non-quantized loading...")
-            
-            # Second attempt: Load without quantization
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name, 
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                load_in_8bit=False,
-                load_in_4bit=False,
-                device_map="auto" if torch.cuda.is_available() else None
-            )
-            print(f"Successfully loaded model {model_name} without quantization")
+        # Simple loading - just like you said
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        print(f"Successfully loaded model {model_name}")
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if not torch.cuda.is_available():
