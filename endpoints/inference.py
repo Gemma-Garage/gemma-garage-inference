@@ -86,9 +86,30 @@ async def hf_inference(request: Request):
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # Load model - after merge_and_unload(), the model is no longer quantized
-        # So we should load it without quantization
+        # Try loading with quantization first, then fallback to non-quantized
+        # This handles both cases: models saved with or without quantization metadata
         try:
+            # First attempt: Load with quantization (in case quantization config wasn't cleared)
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            )
+            print(f"Successfully loaded model {model_name} with quantization")
+            
+        except Exception as quant_error:
+            print(f"Quantized loading failed for {model_name}: {quant_error}")
+            print("Falling back to non-quantized loading...")
+            
+            # Second attempt: Load without quantization
             model = AutoModelForCausalLM.from_pretrained(
                 model_name, 
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
@@ -96,11 +117,7 @@ async def hf_inference(request: Request):
                 load_in_4bit=False,
                 device_map="auto" if torch.cuda.is_available() else None
             )
-            print(f"Successfully loaded model {model_name} without quantization (merged model)")
-            
-        except Exception as e:
-            print(f"Error loading model {model_name}: {e}")
-            raise e
+            print(f"Successfully loaded model {model_name} without quantization")
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if not torch.cuda.is_available():
