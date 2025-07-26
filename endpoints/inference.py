@@ -116,19 +116,6 @@ async def hf_inference(request: Request):
                 print(f"🔍 [Inference Debug] Final MODEL_DIR contents:")
                 for item in os.listdir(MODEL_DIR):
                     print(f"🔍 [Inference Debug]   {item}")
-                
-                # Create missing optional files if they don't exist
-                optional_files = {
-                    'added_tokens.json': '{}',
-                    'special_tokens_map.json': '{"bos_token": null, "eos_token": null, "unk_token": null, "pad_token": null}'
-                }
-                
-                for filename, default_content in optional_files.items():
-                    file_path = os.path.join(MODEL_DIR, filename)
-                    if not os.path.exists(file_path):
-                        print(f"🔍 [Inference Debug] Creating missing optional file: {filename}")
-                        with open(file_path, 'w') as f:
-                            f.write(default_content)
                     
         except FileNotFoundError as e:
             print(f"🔍 [Inference Debug] FileNotFoundError: {e}")
@@ -146,6 +133,19 @@ async def hf_inference(request: Request):
                     print(f"🔍 [Inference Debug]   {item}")
             else:
                 print(f"🔍 [Inference Debug] MODEL_DIR {MODEL_DIR} does not exist!")
+            
+            # Create missing optional files BEFORE loading tokenizer
+            optional_files = {
+                'added_tokens.json': '{}',
+                'special_tokens_map.json': '{"bos_token": null, "eos_token": null, "unk_token": null, "pad_token": null}'
+            }
+            
+            for filename, default_content in optional_files.items():
+                file_path = os.path.join(MODEL_DIR, filename)
+                if not os.path.exists(file_path):
+                    print(f"🔍 [Inference Debug] Creating missing optional file: {filename}")
+                    with open(file_path, 'w') as f:
+                        f.write(default_content)
             
             # Load tokenizer - handle missing optional files gracefully
             try:
@@ -178,7 +178,11 @@ async def hf_inference(request: Request):
             print(f"Successfully loaded LoRA adapters for request_id {request_id}")
             
         except Exception as e:
-            print(f"Error loading model/tokenizer for request_id {request_id}: {str(e)}")
+            print(f"🔍 [Inference Debug] Error loading model/tokenizer for request_id {request_id}: {str(e)}")
+            print(f"🔍 [Inference Debug] Error type: {type(e)}")
+            print(f"🔍 [Inference Debug] Error traceback:")
+            import traceback
+            traceback.print_exc()
             return {"error": f"Error loading model or tokenizer: {str(e)}"}
         
         # Generate response
