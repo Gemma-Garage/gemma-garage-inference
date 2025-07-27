@@ -134,26 +134,20 @@ async def hf_inference(request: Request):
             else:
                 print(f"🔍 [Inference Debug] MODEL_DIR {MODEL_DIR} does not exist!")
             
-            # Create missing optional files BEFORE loading tokenizer
-            optional_files = {
-                'added_tokens.json': '{}',
-                'special_tokens_map.json': '{"bos_token": null, "eos_token": null, "unk_token": null, "pad_token": null}'
-            }
+            # Note: We're loading tokenizer from base model, so we don't need to create missing tokenizer files
             
-            for filename, default_content in optional_files.items():
-                file_path = os.path.join(MODEL_DIR, filename)
-                if not os.path.exists(file_path):
-                    print(f"🔍 [Inference Debug] Creating missing optional file: {filename}")
-                    with open(file_path, 'w') as f:
-                        f.write(default_content)
-            
-            # Load tokenizer - handle missing optional files gracefully
+            # Load tokenizer from base model instead of local files to avoid missing tokenizer files
             try:
-                tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+                print(f"🔍 [Inference Debug] Loading tokenizer from base model: {base_model}")
+                tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
             except Exception as tokenizer_error:
-                print(f"🔍 [Inference Debug] Tokenizer loading error: {tokenizer_error}")
-                # Try loading without optional files
-                tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True, local_files_only=True)
+                print(f"🔍 [Inference Debug] Tokenizer loading error from base model: {tokenizer_error}")
+                # Fallback to local files if base model tokenizer fails
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+                except Exception as local_tokenizer_error:
+                    print(f"🔍 [Inference Debug] Local tokenizer loading error: {local_tokenizer_error}")
+                    raise local_tokenizer_error
             
             # Load base model with the same quantization settings as training
             # This matches the LOAD_IN_4BIT = True setting from finetuning
