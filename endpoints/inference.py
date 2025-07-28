@@ -10,6 +10,7 @@ class InferenceRequest(BaseModel):
     model_name: str
     prompt: str
     max_new_tokens: int = 100
+    base_model: str = "google/gemma-2b"  # Base model for LoRA adapters
 
 @router.post("/inference")
 async def hf_inference(request: InferenceRequest):
@@ -18,42 +19,36 @@ async def hf_inference(request: InferenceRequest):
     model_name = request.model_name
     prompt = request.prompt
     max_new_tokens = request.max_new_tokens
+    base_model = request.base_model
+    lora_target_modules = request.lora_target_modules
     
     print(f"🔍 [Inference Debug] Model name: {model_name}")
     print(f"🔍 [Inference Debug] Prompt: {prompt}")
     print(f"🔍 [Inference Debug] Max new tokens: {max_new_tokens}")
+    print(f"🔍 [Inference Debug] Base model: {base_model}")
+    print(f"🔍 [Inference Debug] LoRA target modules: {lora_target_modules}")
     
-    if not model_name or not prompt:
-        return {"error": "model_name and prompt are required"}
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     
-    try:
-        # Load model and tokenizer directly from Hugging Face Hub
-        print(f"🔍 [Inference Debug] Loading tokenizer from {model_name}")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Try to load as regular model first
+    print(f"🔍 [Inference Debug] Attempting to load model from {model_name}")
+    
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    )
+    print(f"🔍 [Inference Debug] Loaded as regular model successfully")
+    
+    # Generate response
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if not torch.cuda.is_available():
+        print(f"🔍 [Inference Debug] No GPU available, using CPU")
+        model = model.to(device)
+    
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+    response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    print(f"🔍 [Inference Debug] Generated response: {response_text}")
+    return {"response": response_text}
         
-        print(f"🔍 [Inference Debug] Loading model from {model_name}")
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto" if torch.cuda.is_available() else None,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        )
-        
-        print(f"🔍 [Inference Debug] Model and tokenizer loaded successfully")
-        
-        # Generate response
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        if not torch.cuda.is_available():
-            model = model.to(device)
-        
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
-        response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        print(f"🔍 [Inference Debug] Generated response: {response_text}")
-        return {"response": response_text}
-        
-    except Exception as e:
-        print(f"🔍 [Inference Debug] Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {"error": f"Error during inference: {str(e)}"}

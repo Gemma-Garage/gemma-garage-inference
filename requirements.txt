@@ -89,3 +89,4 @@ transformers
 # PDF Processing
 PyMuPDF==1.25.4
 bitsandbytes
+huggingface_hub
