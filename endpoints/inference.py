@@ -20,7 +20,6 @@ async def hf_inference(request: InferenceRequest):
     prompt = request.prompt
     max_new_tokens = request.max_new_tokens
     base_model = request.base_model
-    lora_target_modules = request.lora_target_modules
     
     print(f"🔍 [Inference Debug] Model name: {model_name}")
     print(f"🔍 [Inference Debug] Prompt: {prompt}")
