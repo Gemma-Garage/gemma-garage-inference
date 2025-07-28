@@ -8,7 +8,9 @@ origins = [
     "http://localhost:3000",
     "http://localhost",
     "http://127.0.0.1:3000",
-    "https://gemma-garage.web.app"
+    "https://gemma-garage.web.app",
+    "https://gemma-garage.firebaseapp.com",
+    "*"  # Temporarily allow all origins for debugging
 ]
 
 app.add_middleware(
@@ -18,6 +20,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "inference"}
 
 #inference endpoint
 app.include_router(inference.router, tags=["Inference"])
