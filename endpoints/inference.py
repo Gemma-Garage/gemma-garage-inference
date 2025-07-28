@@ -25,7 +25,6 @@ async def hf_inference(request: InferenceRequest):
     print(f"🔍 [Inference Debug] Prompt: {prompt}")
     print(f"🔍 [Inference Debug] Max new tokens: {max_new_tokens}")
     print(f"🔍 [Inference Debug] Base model: {base_model}")
-    print(f"🔍 [Inference Debug] LoRA target modules: {lora_target_modules}")
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     
