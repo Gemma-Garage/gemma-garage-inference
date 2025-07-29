@@ -33,7 +33,7 @@ async def hf_inference(request: InferenceRequest):
     
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        #target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     )
     print(f"🔍 [Inference Debug] Loaded as regular model successfully")
     
