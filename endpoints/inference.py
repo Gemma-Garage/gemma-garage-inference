@@ -47,8 +47,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading base model: {base_model}")
                 base_model_instance = AutoModelForCausalLM.from_pretrained(
                     base_model,
-                    #device_map="auto" if torch.cuda.is_available() else None,
-                    #torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
                 )
                 
                 # Apply LoRA adapters
@@ -60,8 +60,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading as regular model...")
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    #device_map="auto" if torch.cuda.is_available() else None,
-                    #torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
                 )
                 print(f"🔍 [Inference Debug] Loaded as regular model successfully")
                 
@@ -71,8 +71,8 @@ async def hf_inference(request: InferenceRequest):
             try:
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    device_map="auto" if torch.cuda.is_available() else None,
-                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
                 )
                 print(f"🔍 [Inference Debug] Loaded as regular model successfully")
             except Exception as regular_error:
@@ -85,8 +85,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading base model: {base_model}")
                 base_model_instance = AutoModelForCausalLM.from_pretrained(
                     base_model,
-                    device_map="auto" if torch.cuda.is_available() else None,
-                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
                 )
                 
                 # Apply LoRA adapters
@@ -100,14 +100,23 @@ async def hf_inference(request: InferenceRequest):
         
         print(f"🔍 [Inference Debug] Model and tokenizer loaded successfully")
         
-        # Generate response
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        if not torch.cuda.is_available():
-            print(f"🔍 [Inference Debug] No GPU available, using CPU")
-            model = model.to(device)
+        # Generate response - force everything to CUDA
+        device = "cuda"
+        print(f"🔍 [Inference Debug] Using device: {device}")
         
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        # Ensure model is on CUDA
+        model = model.to(device)
+        print(f"🔍 [Inference Debug] Model moved to {device}")
+        
+        # Tokenize and move inputs to CUDA
+        inputs = tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        print(f"🔍 [Inference Debug] Inputs moved to {device}")
+        
+        # Generate with proper device handling
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        
         response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
         print(f"🔍 [Inference Debug] Generated response: {response_text}")
