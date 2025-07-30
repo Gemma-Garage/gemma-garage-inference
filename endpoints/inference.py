@@ -10,7 +10,7 @@ class InferenceRequest(BaseModel):
     model_name: str
     prompt: str
     max_new_tokens: int = 100
-    base_model: str = "google/gemma-2b"  # Base model for LoRA adapters
+    base_model: str = "unsloth/gemma-3-1b-it"  # Base model for LoRA adapters
 
 @router.post("/inference")
 async def hf_inference(request: InferenceRequest):
