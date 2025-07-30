@@ -12,6 +12,11 @@ class InferenceRequest(BaseModel):
     max_new_tokens: int = 100
     base_model: str = "unsloth/gemma-3-1b-it"  # Base model for LoRA adapters
 
+class BaseModelInferenceRequest(BaseModel):
+    base_model: str = "unsloth/gemma-3-1b-it"
+    prompt: str
+    max_new_tokens: int = 100
+
 @router.post("/inference")
 async def hf_inference(request: InferenceRequest):
     print(f"🔍 [Inference Debug] Received request: {request}")
@@ -47,8 +52,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading base model: {base_model}")
                 base_model_instance = AutoModelForCausalLM.from_pretrained(
                     base_model,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
+                    #device_map="auto",
+                    #torch_dtype=torch.float16,
                 )
                 
                 # Apply LoRA adapters
@@ -60,8 +65,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading as regular model...")
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
+                    #device_map="auto",
+                    #torch_dtype=torch.float16,
                 )
                 print(f"🔍 [Inference Debug] Loaded as regular model successfully")
                 
@@ -71,8 +76,8 @@ async def hf_inference(request: InferenceRequest):
             try:
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
+                    #device_map="auto",
+                    #torch_dtype=torch.float16,
                 )
                 print(f"🔍 [Inference Debug] Loaded as regular model successfully")
             except Exception as regular_error:
@@ -85,8 +90,8 @@ async def hf_inference(request: InferenceRequest):
                 print(f"🔍 [Inference Debug] Loading base model: {base_model}")
                 base_model_instance = AutoModelForCausalLM.from_pretrained(
                     base_model,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
+                    #device_map="auto",
+                    #torch_dtype=torch.float16,
                 )
                 
                 # Apply LoRA adapters
@@ -127,4 +132,60 @@ async def hf_inference(request: InferenceRequest):
         import traceback
         traceback.print_exc()
         return {"error": f"Error during inference: {str(e)}"}
+
+@router.post("/base-inference")
+async def base_model_inference(request: BaseModelInferenceRequest):
+    print(f"🔍 [Base Inference Debug] Received request: {request}")
+    
+    base_model = request.base_model
+    prompt = request.prompt
+    max_new_tokens = request.max_new_tokens
+    
+    print(f"🔍 [Base Inference Debug] Base model: {base_model}")
+    print(f"🔍 [Base Inference Debug] Prompt: {prompt}")
+    print(f"🔍 [Base Inference Debug] Max new tokens: {max_new_tokens}")
+    
+    if not base_model or not prompt:
+        return {"error": "base_model and prompt are required"}
+    
+    try:
+        # Load tokenizer and model directly from Hugging Face Hub
+        print(f"🔍 [Base Inference Debug] Loading tokenizer from {base_model}")
+        tokenizer = AutoTokenizer.from_pretrained(base_model)
+        
+        print(f"🔍 [Base Inference Debug] Loading base model from {base_model}")
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model,
+            #device_map="auto",
+            #torch_dtype=torch.float16,
+        )
+        print(f"🔍 [Base Inference Debug] Loaded base model successfully")
+        
+        # Generate response - force everything to CUDA
+        device = "cuda"
+        print(f"🔍 [Base Inference Debug] Using device: {device}")
+        
+        # Ensure model is on CUDA
+        model = model.to(device)
+        print(f"🔍 [Base Inference Debug] Model moved to {device}")
+        
+        # Tokenize and move inputs to CUDA
+        inputs = tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        print(f"🔍 [Base Inference Debug] Inputs moved to {device}")
+        
+        # Generate with proper device handling
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        
+        response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        print(f"🔍 [Base Inference Debug] Generated response: {response_text}")
+        return {"response": response_text}
+        
+    except Exception as e:
+        print(f"🔍 [Base Inference Debug] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Error during base model inference: {str(e)}"}
         
